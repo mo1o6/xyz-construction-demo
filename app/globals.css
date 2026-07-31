@@ -1,0 +1,341 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Palette sampled directly from the footage (ffmpeg 4x3 region averages):
+     daylight earth   #605848 → #9B896F      concrete/slate  #57574C · #7A7875
+     timber           #90755A · #8A6D50      golden hour     #C9BAAB · #A59686
+     night sky        #333C42 → #61676E      night foliage   #3B3E2D · #383A29
+   Ink is the night sky pushed to its darkest; bone/sand come from golden hour;
+   brass is the timber hue saturated for use as the single accent.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-ink: #0b0e13;
+  --color-bone: #f2ece2;
+  --color-sand: #cbbcad;
+  --color-brass: #d3a96b;
+
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+    /* GSAP owns scroll position; native smooth scrolling fights ScrollTrigger. */
+    scroll-behavior: auto;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-bone);
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-brass);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brass);
+    outline-offset: 3px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Watermark geometry.
+
+   The source is 1280x720 with a baked-in 4-point sparkle watermark measured at
+   ~44x46px centred on (1159, 598) — i.e. 121px from the right edge and 122px
+   from the bottom edge, identical in every sampled frame.
+
+   The video is object-fit:cover with object-position:100% 100%, which pins the
+   video's bottom-right corner to the stage's bottom-right corner at every
+   aspect ratio, so the cover scale factor is reproducible in CSS.
+
+   The orb lives INSIDE the pinned stage and sizes itself from container query
+   units, so it tracks the video box itself rather than the viewport. That
+   matters here: GSAP's pin writes inline pixel width/height onto the stage, so
+   a viewport-derived scale could drift from the real video box. cq units cannot
+   drift — they resolve against whatever the stage actually measures.
+--------------------------------------------------------------------------- */
+.stage {
+  container-type: size;
+}
+
+.nav-orb {
+  /* Fallback for engines without size container queries. */
+  --vscale: max(calc(100vw / 1280), calc(100dvh / 720));
+  /* Exact: resolves against the stage box, inline pin styles included. */
+  --vscale: max(calc(100cqw / 1280), calc(100cqh / 720));
+
+  --wm-right: calc(var(--vscale) * 121);
+  --wm-bottom: calc(var(--vscale) * 122);
+  /* 64 video-px diameter ≈ 1.45x the 44x46px glyph, so the disc always covers
+     the star's axial points with margin to spare. */
+  --wm-size: clamp(3.5rem, calc(var(--vscale) * 64), 6.75rem);
+
+  width: var(--wm-size);
+  height: var(--wm-size);
+  right: calc(var(--wm-right) - var(--wm-size) / 2);
+  bottom: calc(var(--wm-bottom) - var(--wm-size) / 2);
+}
+
+/* ---------------------------------------------------------------------------
+   Video clarity.
+
+   The source is 720p stretched full-bleed, so it is soft by definition. The
+   convolution below is a mild unsharp mask — it can raise perceived acutance on
+   edges that survived the encode, but it cannot add resolution that was never
+   captured. Kernel centre is deliberately low (1.64 with -0.16 orthogonals,
+   summing to 1.0) to stay under the threshold where halos appear on the
+   high-contrast rebar and scaffold edges.
+
+   The filter itself is applied inline on the element, not here: a fragment-only
+   url() inside an external stylesheet resolves against the stylesheet's base
+   URL in some engines, which would silently drop the reference.
+--------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   Liquid glass.
+
+   The blur is what buys legibility: it collapses local highlights (specular
+   pool, blown sky, hi-vis vests) toward the regional mean, so the tint only has
+   to handle that mean rather than the peaks.
+--------------------------------------------------------------------------- */
+/* Base layer is the no-backdrop-filter fallback: a flat tint opaque enough that
+   copy never lands on raw footage. The frosted treatment is layered on top as a
+   positive @supports enhancement — as `@supports not (...)` the CSS minifier
+   statically flattened the fallback into an unconditional rule. */
+.glass {
+  /* Legibility is carried by three levers, deliberately weighted away from
+     tint so the material stays see-through:
+       1. a wide blur, which collapses local structure behind the copy
+       2. a text-shadow on the copy itself (.copy-on-glass) for local headroom
+       3. tint, kept as low as the measured contrast allows
+     Tint was 0.78 when tint alone had to do the work; with the blur widened to
+     44px and the copy carrying its own shadow it sits at 0.40, which is a
+     materially more transparent panel at the same AA compliance. */
+  --glass-tint: 0.4;
+  --glass-sheen: 0.07;
+
+  background: rgb(11 14 19 / 0.66);
+  border: 1px solid rgb(242 236 226 / 0.16);
+  box-shadow:
+    0 30px 70px -28px rgb(0 0 0 / 0.65),
+    inset 0 1px 0 0 rgb(255 255 255 / 0.2),
+    inset 0 -1px 0 0 rgb(255 255 255 / 0.05);
+}
+
+/* Chips are pinned to fixed corners rather than placed on measured negative
+   space, so they land on whatever happens to be there — at golden hour that is
+   blown sky. Measured 4.44:1 at 0.52 tint, so they carry a denser tint than the
+   card. This is deliberately not applied to .glass-card, whose translucency is
+   the point. */
+.glass-chip {
+  --glass-tint: 0.7;
+  --glass-sheen: 0.04;
+}
+
+/* Local contrast headroom for copy sitting on glass, so the panel behind it
+   can stay light. Measured with the glyphs made transparent so the shadow's
+   real contribution is captured rather than assumed. */
+.copy-on-glass {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.62),
+    0 2px 9px rgb(0 0 0 / 0.5);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .glass {
+    background:
+      linear-gradient(
+        135deg,
+        rgb(255 255 255 / var(--glass-sheen)) 0%,
+        rgb(255 255 255 / calc(var(--glass-sheen) * 0.3)) 44%,
+        rgb(11 14 19 / 0.05) 100%
+      ),
+      rgb(11 14 19 / var(--glass-tint));
+    backdrop-filter: blur(44px) saturate(1.5);
+  }
+}
+
+.glass-card {
+  border-radius: clamp(1.1rem, 1.9vw, 1.6rem);
+}
+
+.glass-chip {
+  border-radius: 999px;
+  padding: 0.55rem 1.05rem;
+}
+
+/* Fine grain — filmic surface over the whole plate; too faint (4.5% overlay) to
+   affect contrast either way. */
+.grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+}
+
+/* ---------------------------------------------------------------------------
+   Type
+--------------------------------------------------------------------------- */
+.display {
+  font-family: var(--font-display);
+  font-variation-settings: "SOFT" 18, "WONK" 1;
+  font-weight: 300;
+  letter-spacing: -0.022em;
+  line-height: 0.92;
+  font-size: clamp(2.6rem, 7.2vw, 6.4rem);
+  text-shadow: 0 2px 28px rgb(11 14 19 / 0.55), 0 1px 4px rgb(11 14 19 / 0.4);
+}
+
+.chapter-title {
+  font-family: var(--font-display);
+  font-variation-settings: "SOFT" 18, "WONK" 1;
+  font-weight: 300;
+  letter-spacing: -0.018em;
+  line-height: 1;
+  /* No own text-shadow — inherits .copy-on-glass so card copy is consistent. */
+  font-size: clamp(1.75rem, 3.4vw, 2.9rem);
+}
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------------
+   Opening veil.
+
+   Driven by scroll position, not by a one-shot animation: the prologue segment
+   of the pinned timeline maps scrollY 0→~420px onto opacity 1→0, so scrolling
+   back to the top restores the black. Opaque is therefore the correct resting
+   state at scrollY 0 and is set here so first paint is right before JS runs.
+
+   The failsafe animation is a dead man's switch for the case where the
+   timeline never gets built (JS disabled or broken) — without it, an opaque
+   base would leave the page stuck on black. build() cancels it as soon as the
+   scrub takes over, well inside the 6s delay.
+--------------------------------------------------------------------------- */
+@keyframes veil-failsafe {
+  to {
+    opacity: 0;
+  }
+}
+
+.intro-veil {
+  opacity: 1;
+  pointer-events: none;
+  background: #000;
+  animation: veil-failsafe 200ms linear 6s forwards;
+}
+
+/* Studio credit on the opening card. Sans rather than the display serif so the
+   agency mark reads as distinct from the XYZ brand reveal that follows. */
+.veil-credit {
+  font-family: var(--font-sans);
+  font-size: clamp(1.5rem, 3.4vw, 2.4rem);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+/* Opacity floor is 0.7 rather than 0.55: at 1.75px strokes antialiasing eats
+   roughly half the nominal value, and the dimmest point of the cycle measured
+   2.19:1 against the 3:1 floor for non-text UI. */
+@keyframes scroll-hint-bounce {
+  0%,
+  100% {
+    transform: translateY(-0.28rem);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(0.28rem);
+    opacity: 1;
+  }
+}
+
+.scroll-hint svg {
+  animation: scroll-hint-bounce 2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Chapter card.
+
+   Base position is chapter 01's anchor, expressed in CSS percentages so the
+   very first paint is already correct without waiting for JS. GSAP animates
+   transform deltas from this base for the later chapters.
+--------------------------------------------------------------------------- */
+.chapter-card {
+  /* Chapter 01's anchor, mirrored from CARD_ANCHORS[0] (left-bottom). */
+  left: 7%;
+  top: 64%;
+  width: min(27rem, calc(100% - 3rem));
+  will-change: transform;
+}
+
+/* Narrow viewports: the card is close to full width, so horizontal travel has
+   nowhere to go. It stays put and only the vertical anchor varies. */
+@media (max-width: 767px) {
+  .chapter-card {
+    left: 1.25rem;
+    width: calc(100% - 2.5rem);
+  }
+}
+
+/* Chapter captions are stacked in the same cell and cross-faded by the scrub,
+   so they must not affect each other's layout. */
+.chapter {
+  grid-area: 1 / 1;
+  opacity: 0;
+  visibility: hidden;
+  will-change: transform, opacity;
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion: no pin, no scrub. The runway collapses to a single screen
+   and every chapter caption becomes a plain, always-visible list.
+--------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  /* No pin means no prologue to scrub, so the veil would never clear. */
+  .intro-veil {
+    display: none !important;
+  }
+
+  .runway {
+    height: auto !important;
+  }
+
+  .stage {
+    height: auto !important;
+    min-height: 100svh;
+  }
+
+  .chapter {
+    grid-area: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: none !important;
+  }
+
+  .chapter-stack {
+    display: flex !important;
+    flex-direction: column;
+    gap: clamp(1.75rem, 4vw, 3rem);
+    padding-block: clamp(4rem, 10vh, 8rem);
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

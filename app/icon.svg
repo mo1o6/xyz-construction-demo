@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#0b0e13" />
+  <!-- Brass rule + bone XYZ monogram, matching the site's wordmark lockup. -->
+  <rect x="14" y="45" width="36" height="2.5" rx="1.25" fill="#d3a96b" />
+  <text
+    x="32"
+    y="37"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="26"
+    font-weight="600"
+    letter-spacing="0.5"
+    fill="#f2ece2"
+  >XYZ</text>
+</svg>

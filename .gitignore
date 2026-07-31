@@ -1,0 +1,7 @@
+.claude/settings.local.json
+.DS_Store
+.next
+*.tsbuildinfo
+next-env.d.ts
+node_modules
+out
