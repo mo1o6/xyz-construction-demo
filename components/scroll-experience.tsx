@@ -362,12 +362,6 @@ export default function ScrollExperience() {
           { scaleX: 1, duration: duration + PROLOGUE },
           0,
         );
-        timeline.to(
-          ".scroll-cue",
-          { autoAlpha: 0, duration: 0.5 },
-          PROLOGUE + 0.15,
-        );
-
         // Card travel. Deltas are measured from the CSS base position (chapter
         // 01's anchor) using offsetLeft/offsetTop, which are transform-free, so
         // repeated refreshes never compound. Function-based values re-evaluate
@@ -631,17 +625,6 @@ export default function ScrollExperience() {
                 ))}
               </div>
             </div>
-          </div>
-
-          {/* Scroll cue */}
-          <div className="scroll-cue absolute bottom-[clamp(1.75rem,4vh,3rem)] left-[clamp(1.5rem,6vw,7rem)] z-20">
-            <span className="glass glass-chip copy-on-glass flex items-center gap-3">
-              <span className="eyebrow text-bone/70">Scroll</span>
-              <span
-                aria-hidden="true"
-                className="h-px w-10 origin-left bg-bone/45"
-              />
-            </span>
           </div>
 
           {/* Scrub progress */}
