@@ -63,6 +63,41 @@
 --------------------------------------------------------------------------- */
 .stage {
   container-type: size;
+
+  /* Height is asserted here, with !important, because GSAP's pin writes an
+     inline pixel height onto this element and freezes it at refresh time. That
+     is what produced the iOS Safari letterboxing: the page was sized in svh
+     (smallest viewport, toolbars showing), so once Safari collapsed its
+     toolbars the visible area grew while the pinned box kept its old pixel
+     height, leaving bars top and bottom. dvh tracks the dynamic viewport, and
+     !important lets it win over GSAP's inline value so the box stays full-bleed
+     through a toolbar transition rather than waiting on the debounced refresh.
+     The refresh still runs — it re-syncs ScrollTrigger's cached start/end and
+     the card anchors — but the video never letterboxes while it is pending.
+
+     GSAP writes BOTH height and max-height (and width/max-width) inline, so
+     overriding height alone is not enough — the frozen max-height would clamp
+     the box straight back to the old value and the bars would stay. All four
+     are asserted. Width tracks the viewport the same way so an orientation
+     change is correct immediately rather than 180ms later.
+
+     Reduced motion overrides this back to auto further down the file. */
+  /* vh is the fallback for engines without dvh (iOS < 15.4), where the dvh
+     declarations are dropped and the stage would otherwise have no height at
+     all. It lives outside the @supports block below rather than as a plain
+     preceding declaration because the CSS minifier strips a same-property
+     fallback as redundant — a feature query survives minification. */
+  height: 100vh !important;
+  max-height: 100vh !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+@supports (height: 100dvh) {
+  .stage {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+  }
 }
 
 .nav-orb {
@@ -314,8 +349,12 @@
   }
 
   .stage {
+    /* max-height has to be released too: the sizing rules above set it to one
+       viewport, which would clamp the stage and clip the stacked chapter list
+       that reduced motion lays out in place of the scrub. */
     height: auto !important;
-    min-height: 100svh;
+    max-height: none !important;
+    min-height: 100dvh;
   }
 
   .chapter {

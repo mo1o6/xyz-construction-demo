@@ -15,10 +15,10 @@ const NOMINAL_DURATION = 10;
 /**
  * Prologue: timeline units spent revealing the veil before the video starts.
  *
- * The runway is 660svh, of which 560svh is pinned. 60svh of that (~420px at a
- * 700px viewport) is the prologue and 500svh drives the video, so the prologue
+ * The runway is 660dvh, of which 560dvh is pinned. 60dvh of that (~420px at a
+ * 700px viewport) is the prologue and 500dvh drives the video, so the prologue
  * is added on top of chapter 01's window rather than taken out of it.
- * 10 video-seconds / 500svh × 60svh = 1.2 timeline units.
+ * 10 video-seconds / 500dvh × 60dvh = 1.2 timeline units.
  */
 const PROLOGUE = 1.2;
 
@@ -186,6 +186,12 @@ const CARD_FADE_OUT = 0.45;
 /** Half-width of the card's positional move, centred on a chapter boundary. */
 const CARD_MOVE_HALF = 0.15;
 
+/**
+ * Minimum viewport height change treated as a real toolbar transition rather
+ * than scroll jitter. Safari's toolbars are ~45-90px.
+ */
+const TOOLBAR_EPSILON = 40;
+
 export default function ScrollExperience() {
   const rootRef = useRef<HTMLDivElement>(null);
   const runwayRef = useRef<HTMLDivElement>(null);
@@ -202,9 +208,48 @@ export default function ScrollExperience() {
     if (!video || !runway || !stage) return;
 
     gsap.registerPlugin(ScrollTrigger);
-    // Mobile browsers fire resize when the URL bar collapses; refreshing pins
-    // mid-scrub on that would visibly jump the video.
+    // Left on deliberately. This suppresses ScrollTrigger's own reflexive
+    // refresh on mobile height changes so the visualViewport handler below is
+    // the single, debounced place a refresh happens — one controlled path
+    // instead of two competing ones firing mid-toolbar-animation.
     ScrollTrigger.config({ ignoreMobileResize: true });
+
+    // --- Viewport tracking ---------------------------------------------------
+    // Two separate problems on iOS Safari, and dvh only solves the first:
+    //   1. Sizing. svh assumes toolbars are always showing, so the stage was
+    //      short once they collapsed. Fixed in CSS by moving to dvh.
+    //   2. Measurement. GSAP's pin caches pixel dimensions and start/end offsets
+    //      at refresh time, and Safari's toolbar collapse does not reliably fire
+    //      a window resize — so nothing told ScrollTrigger to re-measure.
+    // visualViewport is the event that does fire for toolbar show/hide, so it
+    // drives the re-measure here. The CSS !important height keeps the box itself
+    // correct in the meantime, making this refresh a correctness step for the
+    // scroll maths rather than something the user watches happen.
+    const visual = window.visualViewport;
+    const readViewport = () => ({
+      w: visual?.width ?? window.innerWidth,
+      h: visual?.height ?? window.innerHeight,
+    });
+    let lastViewport = readViewport();
+    let viewportTimer: number | undefined;
+
+    const onViewportChange = () => {
+      const next = readViewport();
+      // A Safari toolbar is roughly 45-90px. Anything smaller is scroll jitter
+      // or pinch-zoom noise, and refreshing on those would cause pin jumps.
+      const heightMoved = Math.abs(next.h - lastViewport.h) >= TOOLBAR_EPSILON;
+      const widthMoved = Math.abs(next.w - lastViewport.w) >= 1;
+      if (!heightMoved && !widthMoved) return;
+      lastViewport = next;
+      window.clearTimeout(viewportTimer);
+      // Let the toolbar animation settle before measuring, or we cache a size
+      // from midway through the transition.
+      viewportTimer = window.setTimeout(() => ScrollTrigger.refresh(), 180);
+    };
+
+    visual?.addEventListener("resize", onViewportChange);
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("orientationchange", onViewportChange);
 
     // --- Scroll restoration -------------------------------------------------
     // Next.js restores scroll on reload, which would drop the user mid-scrub
@@ -512,6 +557,10 @@ export default function ScrollExperience() {
 
     return () => {
       window.clearTimeout(fallbackTimer);
+      window.clearTimeout(viewportTimer);
+      visual?.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("orientationchange", onViewportChange);
       settleTimers.forEach(window.clearTimeout);
       window.removeEventListener("load", onLoad);
       window.removeEventListener("pagehide", onPageHide);
@@ -528,12 +577,13 @@ export default function ScrollExperience() {
 
   return (
     <div ref={rootRef}>
-      {/* Scroll runway: 660svh of travel, 560svh pinned — 60svh of prologue
-          (veil reveal, video held at 0) plus 500svh of video scrub. */}
-      <section ref={runwayRef} className="runway relative h-[660svh]">
+      {/* Scroll runway: 660dvh of travel, 560dvh pinned — 60dvh of prologue
+          (veil reveal, video held at 0) plus 500dvh of video scrub. dvh rather
+          than svh so the runway tracks Safari's toolbar state; see .stage. */}
+      <section ref={runwayRef} className="runway relative h-[660dvh]">
         <div
           ref={stageRef}
-          className="stage relative h-[100svh] w-full overflow-hidden bg-ink"
+          className="stage relative h-[100dvh] w-full overflow-hidden bg-ink"
         >
           {/* Mild unsharp mask. This cannot restore resolution the 720p source
               never had — it only sharpens edge transitions that survived the
@@ -682,7 +732,7 @@ export default function ScrollExperience() {
       <section
         ref={closingRef}
         id="contact"
-        className="relative flex min-h-[100svh] flex-col justify-center overflow-hidden bg-ink px-[clamp(1.5rem,6vw,7rem)] py-[clamp(4rem,12vh,9rem)]"
+        className="relative flex min-h-[100dvh] flex-col justify-center overflow-hidden bg-ink px-[clamp(1.5rem,6vw,7rem)] py-[clamp(4rem,12vh,9rem)]"
       >
         <div
           aria-hidden="true"
