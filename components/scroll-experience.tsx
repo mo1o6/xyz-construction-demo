@@ -415,9 +415,11 @@ export default function ScrollExperience() {
         const cardDelta = (i: number, axis: "x" | "y") => {
           if (!card) return 0;
           const stageBox = stage.getBoundingClientRect();
-          // Below the md breakpoint the card is near full width, so horizontal
-          // travel has nowhere to go — only the vertical anchor varies.
-          if (axis === "x" && stageBox.width < 768) return 0;
+          // Below the breakpoint the card is not a floating overlay at all —
+          // it is stacked page content under the video — so the per-chapter
+          // position analysis does not apply and neither axis moves. CSS owns
+          // the layout there; GSAP only cross-fades the copy.
+          if (stageBox.width < 768) return 0;
           const anchor = CARD_ANCHORS[i];
           if (axis === "x") {
             const limit = Math.max(
@@ -610,69 +612,90 @@ export default function ScrollExperience() {
             </filter>
           </svg>
 
-          <video
-            ref={videoRef}
-            className="absolute inset-0 h-full w-full object-cover object-[100%_100%]"
-            style={{
-              filter: 'url("#hero-clarity") contrast(1.1) saturate(1.12)',
-            }}
-            src={VIDEO_SRC}
-            poster="/hero-poster.jpg"
-            muted
-            playsInline
-            preload="auto"
-            disablePictureInPicture
-            aria-hidden="true"
-            tabIndex={-1}
-          />
+          {/* stage-inner is display:contents at 768px+, so every child below
+              positions against .stage exactly as it did before this wrapper
+              existed. Under the breakpoint it becomes the flex column that
+              stacks wordmark / video / caption. */}
+          <div className="stage-inner">
+            {/* The video's own box. Absolute inset-0 at 768px+ (identical to the
+                stage box, so desktop cover-crop maths is untouched); a contained
+                16:9 block below it. Deliberately not a container-query
+                container: container-type implies contain:layout, which would
+                make this a stacking context and trap the orb's z-30 beneath the
+                chapter layer. */}
+            <div className="video-frame">
+              <video
+                ref={videoRef}
+                className="absolute inset-0 h-full w-full object-cover object-[100%_100%]"
+                style={{
+                  filter: 'url("#hero-clarity") contrast(1.1) saturate(1.12)',
+                }}
+                src={VIDEO_SRC}
+                poster="/hero-poster.jpg"
+                muted
+                playsInline
+                preload="auto"
+                disablePictureInPicture
+                aria-hidden="true"
+                tabIndex={-1}
+              />
 
-          <div aria-hidden="true" className="absolute inset-0 grain" />
+              <div aria-hidden="true" className="absolute inset-0 grain" />
 
-          {/* Wordmark — glass chip, same material as the chapter card */}
-          <header className="absolute top-0 left-0 z-20 p-[clamp(1.5rem,3.5vw,3rem)]">
-            <span className="glass glass-chip copy-on-glass flex items-baseline gap-[0.45em]">
-              <span className="font-display text-[1.05rem] leading-none font-semibold tracking-[0.06em] text-bone">
-                XYZ
+              {/* Inside the video frame so it tracks the video box on both
+                  layouts — the stage box on desktop, the contained 16:9 box on
+                  mobile. */}
+              <NavOrb />
+            </div>
+
+            {/* Wordmark — glass chip, same material as the chapter card */}
+            <header className="stage-wordmark absolute top-0 left-0 z-20 p-[clamp(1.5rem,3.5vw,3rem)]">
+              <span className="glass glass-chip copy-on-glass flex items-baseline gap-[0.45em]">
+                <span className="font-display text-[1.05rem] leading-none font-semibold tracking-[0.06em] text-bone">
+                  XYZ
+                </span>
+                <span className="eyebrow leading-none text-bone/70">
+                  Construction
+                </span>
               </span>
-              <span className="eyebrow leading-none text-bone/70">
-                Construction
-              </span>
-            </span>
-          </header>
+            </header>
 
-          {/* Chapter captions — stacked in one grid cell, cross-faded by scrub.
-              The glass card is a sibling of the stack rather than part of each
-              chapter, so its size stays constant while the copy swaps and only
-              its position travels between chapters. */}
-          <div className="absolute inset-0 z-20">
-            <div
-              ref={cardRef}
-              className="chapter-card absolute p-[clamp(1.5rem,2.6vw,2.5rem)]"
-            >
-              <div aria-hidden="true" className="glass glass-card absolute inset-0" />
-              <div className="chapter-stack relative grid">
-                {CHAPTERS.map((chapter) => (
-                  <div key={chapter.index} className="chapter copy-on-glass">
-                    <div className="flex items-center gap-4">
-                      <span
-                        aria-hidden="true"
-                        className="h-px w-[clamp(1.5rem,4vw,3.25rem)] bg-brass/80"
-                      />
-                      {/* Bone rather than brass: at 10px, brass cannot reach
-                          4.5:1 over a backdrop light enough to read as glass.
-                          The brass accent survives in the hairline above. */}
-                      <span className="eyebrow text-bone/85">
-                        Chapter {chapter.index}
-                      </span>
+            {/* Chapter captions — stacked in one grid cell, cross-faded by
+                scrub. Floating over the footage at 768px+; plain page content
+                below the video underneath it. */}
+            <div className="chapter-layer absolute inset-0 z-20">
+              <div
+                ref={cardRef}
+                className="chapter-card absolute p-[clamp(1.5rem,2.6vw,2.5rem)]"
+              >
+                <div
+                  aria-hidden="true"
+                  className="glass glass-card absolute inset-0"
+                />
+                <div className="chapter-stack relative grid">
+                  {CHAPTERS.map((chapter) => (
+                    <div key={chapter.index} className="chapter copy-on-glass">
+                      <div className="flex items-center gap-4">
+                        <span
+                          aria-hidden="true"
+                          className="h-px w-[clamp(1.5rem,4vw,3.25rem)] bg-brass/80"
+                        />
+                        {/* Bone rather than brass: at 10px, brass cannot reach
+                            4.5:1 over a backdrop light enough to read as glass.
+                            The brass accent survives in the hairline above. */}
+                        <span className="eyebrow text-bone/85">
+                          Chapter {chapter.index}
+                        </span>
+                      </div>
+                      <h2 className="chapter-title mt-[clamp(0.85rem,1.8vw,1.4rem)] text-bone">
+                        {chapter.title}
+                      </h2>
+                      <p className="mt-[clamp(0.75rem,1.4vw,1.15rem)] max-w-[32ch] text-[clamp(0.875rem,1.05vw,1.0625rem)] leading-relaxed font-light text-bone/85">
+                        {chapter.body}
+                      </p>
                     </div>
-                    <h2 className="chapter-title mt-[clamp(0.85rem,1.8vw,1.4rem)] text-bone">
-                      {chapter.title}
-                    </h2>
-                    <p className="mt-[clamp(0.75rem,1.4vw,1.15rem)] max-w-[32ch] text-[clamp(0.875rem,1.05vw,1.0625rem)] leading-relaxed font-light text-bone/85">
-                      {chapter.body}
-                    </p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -684,9 +707,6 @@ export default function ScrollExperience() {
           >
             <div className="scrub-progress h-full origin-left bg-brass/80" />
           </div>
-
-          {/* Nav orb lives inside the stage so it tracks the video box exactly */}
-          <NavOrb />
 
           {/* Opening veil — opacity is scrubbed by the prologue segment, so it
               re-darkens if the user scrolls back to the very top.

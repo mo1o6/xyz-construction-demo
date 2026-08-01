@@ -100,6 +100,19 @@
   }
 }
 
+/* Wrapper that lets one DOM serve both layouts: no box at all at 768px+, a
+   flex column below it. */
+.stage-inner {
+  display: contents;
+}
+
+/* At 768px+ this is the stage box, so every measurement downstream is
+   unchanged. The mobile branch turns it into a contained 16:9 block. */
+.video-frame {
+  position: absolute;
+  inset: 0;
+}
+
 .nav-orb {
   /* Fallback for engines without size container queries. */
   --vscale: max(calc(100vw / 1280), calc(100dvh / 720));
@@ -204,6 +217,86 @@
 .glass-chip {
   border-radius: 999px;
   padding: 0.55rem 1.05rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile layout (<768px).
+
+   The source is 16:9. Cover-cropping it to fill a portrait phone needs roughly
+   a 3x zoom, and because the crop is anchored bottom-right to keep the
+   watermark covered, what survives is a narrow slice of the right-hand side
+   rather than the scene. No amount of sizing fixes that, so below the
+   breakpoint the video stops being a background and becomes a contained block
+   at its native ratio, with the copy stacked beneath it instead of floating
+   over it.
+
+   The pin stays: the stage is still one viewport tall and still scrubs, so the
+   scroll timeline, chapter windows and closing transition are untouched. Only
+   the stage's interior changes.
+--------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  .stage-inner {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(1rem, 3.5vw, 1.5rem);
+    padding: clamp(1rem, 5vw, 1.5rem);
+  }
+
+  .video-frame {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    /* Native ratio, so the whole frame is always on screen and object-cover
+       has nothing to crop. */
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 0.75rem;
+    flex: none;
+  }
+
+  /* No crop means the box's own corner is authoritative and the watermark sits
+     at fixed fractions of it: 121/1280 in from the right, 122/720 up from the
+     bottom. Percentage offsets resolve against this containing block, so the
+     desktop cover-scale maths is not needed here. */
+  .nav-orb {
+    --wm-size: 2.75rem;
+    right: calc(9.4531% - var(--wm-size) / 2);
+    bottom: calc(16.9444% - var(--wm-size) / 2);
+  }
+
+  /* order rather than moving it in the DOM: the video frame has to stay first
+     in source so desktop paint order is unchanged, but the wordmark belongs at
+     the top of the stacked column. */
+  .stage-wordmark {
+    position: static;
+    order: -1;
+    padding: 0;
+    flex: none;
+  }
+
+  .chapter-layer {
+    position: static;
+    flex: none;
+  }
+
+  .chapter-card {
+    position: static;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+
+  /* The copy sits on the page background now, not on footage, so the panel
+     behind it has nothing to do. */
+  .glass-card {
+    display: none;
+  }
+
+  .chapter-title {
+    font-size: clamp(1.6rem, 8.5vw, 2.25rem);
+  }
 }
 
 /* Fine grain — filmic surface over the whole plate; too faint (4.5% overlay) to
